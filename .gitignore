@@ -1,0 +1,27 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Logs
+app.log
+*.log
+chat_log.json
+
+# Sensitive Data & Configurations
+.env
+client_secret.json
+credentials.json
+data/
+token.json
+topics.json
+
+# IDEs
+.vscode/
+.idea/
+.DS_Store
+
+# Environments
+venv/
+env/
+.venv/
