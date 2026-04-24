@@ -2,6 +2,7 @@ from pymongo import MongoClient, errors
 from datetime import datetime
 from util.config import MONGODB_URI, MONGODB_DATABASE
 from urllib.parse import quote_plus
+import util.logger as logger
 
 client = None
 db = None
@@ -30,7 +31,7 @@ class MongoDBClient:
                 # username = mongoUser
                 authSource = authenticationDatabase
                 uri = f"mongodb://{username}:{password1}@{host}:{port}/{database}?authSource={authSource}&readPreference=primary&directConnection=true&ssl=false"
-                client = MongoClient(uri)
+                client = MongoClient(MONGODB_URI)
                 cls._instance._db = client[database]
             except Exception as e:
                 raise
@@ -62,29 +63,24 @@ def serialize_doc(doc):
 
 def get_db():
     global client, db, live_sessions
-
     if client is None:
         try:
-            client = MongoClient(
-                MONGODB_URI["MONGO_URI"],
-                serverSelectionTimeoutMS=5000
-            )
-
+            client = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=5000)
             db = client[MONGODB_DATABASE]
-
             live_sessions = db["em_tv_live_sessions"]
-
+            logger.log_info("mongodb_connection_details", db=str(db))
+            
         except errors.ServerSelectionTimeoutError as e:
+            logger.log_error("mongodb_connection_details", str(e))
             client = None
             raise
-
     return live_sessions
 
 def generate_session_id():
-    return "SESSION_" + datetime.now().strftime("%Y%m%d_%H%M%S")
+    return "SESSION_" + datetime.now().strftime("%d%m%Y_%H%M%S")
 
 def get_chat_collection_name():
-    return "em_live_chat_" + datetime.utcnow().strftime("%d_%m_%Y")
+    return "em_tv_live_chat_" + datetime.utcnow().strftime("%d_%m_%Y")
 
 def insert_live_session(channel_id, video_id, chat_room_id, live_video_link, title=""):
     sessions = get_db()
@@ -113,7 +109,7 @@ def insert_live_session(channel_id, video_id, chat_room_id, live_video_link, tit
     sessions.insert_one(data)
     return session_id
 
-def get_active_sessions():  
+def get_active_sessions():
     return list(get_db().find({"status": "active"}))
 
 def get_all_sessions():

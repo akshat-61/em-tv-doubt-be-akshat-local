@@ -1,6 +1,5 @@
 import json
 import time
-from bson import ObjectId
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -8,14 +7,17 @@ from pydantic import BaseModel
 import re
 from db.youtube_live_chats import get_chat_collection
 from db.youtube_live_details import get_active_sessions, get_all_collections
-from server import setup_websocket
 from db.youtube_live_details import insert_live_session
-from core.ai_engine import validate_live_url
-from core.ai_engine import validate_live_url
 from server import setup_websocket
+from handler.chat_handler import start_bot
+from core.ai_engine import validate_live_url
+from bson import ObjectId
+from datetime import datetime
+from core.context_manager import _get_youtube_client
+from db.youtube_live_details import get_session_by_video_id
+from db.youtube_live_chats import get_chat_collection
 
 app = FastAPI(title="YouTube Live Chat API")
-from datetime import datetime
 
 setup_websocket(app)
 
@@ -29,87 +31,6 @@ app.add_middleware(
 
 class LiveRequestModel(BaseModel):
     url: str 
-
-# clients = {}
-
-
-# def setup_websocket(app):
-
-#     @app.websocket("/ws")
-#     async def websocket_endpoint(websocket: WebSocket):
-#         await websocket.accept()
-
-#         query = websocket.scope["query_string"].decode()
-#         params = parse_qs(query)
-
-#         user_id = params.get("userId", [None])[0]
-
-#         if user_id:
-#             clients[user_id] = websocket
-#             print(f"User connected: {user_id}")
-
-#         try:
-#             while True:
-#                 message = await websocket.receive_text()
-#                 data = json.loads(message)
-
-#                 print("Received:", data)
-
-#         except WebSocketDisconnect:
-#             print(f"Client disconnected: {user_id}")
-
-#         except Exception as e:
-#             print(f"WebSocket error: {str(e)}")
-
-#         finally:
-#             if user_id in clients:
-#                 del clients[user_id]
-
-
-# async def send_question_to_frontend(
-#     user_id,
-#     question_id,
-#     username,
-#     time_text,
-#     text,
-#     ai_response=""
-# ):
-#     try:
-#         if user_id in clients:
-#             await clients[user_id].send_json({
-#                 "to": "akshat",
-#                 "message": {
-#                     "id": question_id,
-#                     "username": username,
-#                     "time": time_text,
-#                     "text": text,
-#                     "aiResponse": ai_response
-#                 }
-#             })
-
-#             return True
-
-#         print(f"User not connected: {user_id}")
-#         return False
-
-#     except Exception as e:
-#         print(f"Send error: {str(e)}")
-#         return False
-
-# async def send_question_to_frontend(user_id, chat_data):
-#     if user_id in clients:
-
-#         payload = {
-#             "type": "question",
-#             "id": chat_data.get("id"),
-#             "username": chat_data.get("username"),
-#             "time": datetime.now().strftime("%I:%M %p").lower(),
-#             "text": chat_data.get("text"),
-#             "aiResponse": chat_data.get("aiResponse", "")
-#         }
-
-#         await clients[user_id].send_json(payload)
-
 
 @app.post("/api/live/start")
 def start_live(request: LiveRequestModel):
@@ -141,13 +62,15 @@ def start_live(request: LiveRequestModel):
             url,
             "Started from API"
         )
+        print("🔥 Starting bot:", input_video_id)
+        start_bot(input_video_id)
 
         return {
             "success": True,
             "message": "Live bot started successfully",
             "video_id": input_video_id,
             "session_id": session_id,
-            "started_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            "started_at": datetime.now().strftime("%d-%m-%Y %H:%M:%S")
         }
 
     except HTTPException:
@@ -174,36 +97,83 @@ class ReplyRequest(BaseModel):
 @app.post("/api/reply")
 def send_reply(data: ReplyRequest):
     try:
+        from db.youtube_live_chats import get_chat_collection
+        from bson import ObjectId
+        from datetime import datetime
+
         chat_collection = get_chat_collection(data.video_id)
 
-        reply_doc = {
-            "type": "reply",
-            "chat_id": data.question_id,
-            "message": data.reply,
-            "replied_by": data.replied_by,
-            "video_id": data.video_id,
-            "status": "sent",
-            "created_at": datetime.utcnow(),
-            "updated_at": datetime.utcnow()
+        print("Reply Collection:", chat_collection.name)
+        print("Incoming question_id:", data.question_id)
+
+        query = {
+            "$or": [
+                {"chat_id": str(data.question_id)}
+            ]
         }
 
-        result = chat_collection.insert_one(reply_doc)
+        try:
+            query["$or"].append(
+                {"_id": ObjectId(str(data.question_id))}
+            )
+        except Exception:
+            pass
+
+        result = chat_collection.update_one(
+            query,
+            {
+                "$set": {
+                    "answer": str(data.reply),
+                    "replied_by": str(data.replied_by),
+                    "status": "replied",
+                    "updated_at": datetime.utcnow()
+                }
+            }
+        )
+
+        if result.matched_count == 0:
+            raise HTTPException(
+                status_code=404,
+                detail="Question not found"
+            )
+
+        youtube_sent = False
+        youtube_error = None
+
+        try:
+            from core.youtube_reply import send_reply_to_youtube
+
+            send_reply_to_youtube(
+                data.video_id,
+                data.question_id,
+                data.reply
+            )
+
+            youtube_sent = True
+
+        except Exception as e:
+            youtube_error = str(e)
+            print("YouTube Reply Error:", youtube_error)
 
         return {
             "success": True,
-            "reply_id": str(result.inserted_id),
-            "message": "Reply sent successfully"
+            "db_updated": True,
+            "youtube_sent": youtube_sent,
+            "youtube_error": youtube_error,
+            "message": "Reply processed successfully"
         }
 
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except HTTPException:
+        raise
 
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=str(e)
+        )
 
 @app.get("/api/active-sessions")
 def get_sessions():
-    """
-    Return currently active live sessions
-    """
     try:
         sessions = get_active_sessions()
 

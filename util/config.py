@@ -47,9 +47,7 @@ password = "chat@456"
 database = "chat_srvs"
 authenticationDatabase = "admin"
 
-MONGODB_URI = {
-    "MONGO_URI" : f"mongodb://{username}:{quote_plus(password)}@{host}:{port}/{database}?authSource={authenticationDatabase}&readPreference=primary&directConnection=true&ssl=false"
-}
+MONGODB_URI = f"mongodb://{username}:{quote_plus(password)}@{host}:{port}/{database}?authSource={authenticationDatabase}&readPreference=primary&directConnection=true&ssl=false"
 
 
 MONGODB_DATABASE = database

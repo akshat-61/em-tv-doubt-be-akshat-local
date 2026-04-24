@@ -189,6 +189,6 @@ if __name__ == "__main__":
         exp_dt = datetime.fromtimestamp(exp, tz=timezone.utc) if exp else None
         logger.log_info(f"[TokenManager] Token (first 60 chars): {token[:60]}...")
         if exp_dt:
-            logger.log_info(f"[TokenManager] Expires at: {exp_dt.strftime('%Y-%m-%d %H:%M:%S UTC')}")
+            logger.log_info(f"[TokenManager] Expires at: {exp_dt.strftime('%d-%m-%Y %H:%M:%S UTC')}")
     except Exception as e:
         logger.log_error("TokenManager_Main", str(e))

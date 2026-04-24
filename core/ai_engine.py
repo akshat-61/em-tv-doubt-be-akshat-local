@@ -192,8 +192,8 @@ def classify_message(message, stream_context=""):
             data = response.json()
 
             result = (
-                data.get("ai_response")
-                or data.get("response")
+            #     data.get("ai_response")
+                data.get("response")
                 or data.get("reply")
                 or ""
             ).strip().lower()

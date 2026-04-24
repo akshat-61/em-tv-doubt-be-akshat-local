@@ -184,12 +184,6 @@ def start_bot(video_id):
             daemon=True
         ).start()
 
-
-def stop_bot(video_id):
-    with _threads_lock:
-        if video_id in _active_threads:
-            del _active_threads[video_id]
-
 def run():
     while not shutdown_event.is_set():
         try:

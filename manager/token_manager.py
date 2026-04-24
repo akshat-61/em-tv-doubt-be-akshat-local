@@ -4,7 +4,7 @@ import threading
 import requests
 from datetime import datetime, timezone, timedelta
 
-from config import TOKEN_FILE, YOUTUBE_CLIENT_SECRET_FILE
+from util.config import TOKEN_FILE, YOUTUBE_CLIENT_SECRET_FILE
 
 REFRESH_BUFFER_MINUTES = 5
 
