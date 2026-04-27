@@ -8,6 +8,7 @@ from db.youtube_live_chats import get_chat_collection
 
 
 clients = {}
+push_tasks = {}
 
 
 def setup_websocket(app):
@@ -21,13 +22,18 @@ def setup_websocket(app):
 
         video_id = params.get("userId", [None])[0]
 
+        global clients, push_tasks
+
         if video_id:
-            clients[video_id] = websocket
             print(f"User connected: {video_id}")
+            clients[video_id] = websocket
 
             await send_db_questions(video_id)
 
-            asyncio.create_task(live_push(video_id))
+            if video_id not in push_tasks:
+                push_tasks[video_id] = asyncio.create_task(
+                    live_push(video_id)
+                )
 
         try:
             while True:
@@ -75,11 +81,6 @@ def setup_websocket(app):
                         )
                     )
 
-                    await websocket.send_json({
-                        "success": True,
-                        "message": "Reply processed"
-                    })
-
                 except Exception as e:
                     print("Reply Error:", str(e))
 
@@ -93,6 +94,9 @@ def setup_websocket(app):
 
         finally:
             clients.pop(video_id, None)
+            if video_id in push_tasks:
+                push_tasks[video_id].cancel()
+                del push_tasks[video_id]
 
 
 async def send_db_questions(video_id):
@@ -115,6 +119,17 @@ async def send_db_questions(video_id):
     except Exception as e:
         print("send_db_questions Error:", str(e))
 
+async def send_spam_alert(video_id, message, status):
+    try:
+        if video_id in clients:
+            await clients[video_id].send_json({
+                "type": "spam_alert",
+                "video_id": video_id,
+                "message": message,
+                "status": status
+            })
+    except Exception as e:
+        print("send_spam_alert Error:", e)
 
 async def live_push(video_id):
     last_id = None
@@ -138,6 +153,10 @@ async def live_push(video_id):
 
             await asyncio.sleep(2)
 
+        except asyncio.CancelledError:
+            print(f"Stopped The Push: {video_id}")
+            break
+
         except Exception as e:
             print("Live Push Error:", e)
             await asyncio.sleep(2)
@@ -146,13 +165,13 @@ async def live_push(video_id):
 async def send_chat(video_id, chat):
     if video_id in clients:
         await clients[video_id].send_json({
-            "to": "akshat",
             "message": {
                 "id": str(chat["_id"]),
                 "username": chat.get("author_name", "@user"),
                 "time": str(chat.get("created_at", "")),
                 "text": chat.get("question", ""),
                 "aiResponse": chat.get("reply", ""),
-                "answer": chat.get("answer", "")
+                "answer": chat.get("answer", ""),
+                "event_name": "SEND_DOUBT"
             }
         })

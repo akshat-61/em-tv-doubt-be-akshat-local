@@ -7,15 +7,19 @@ import util.logger as logger
 from util.config import API_URL
 from util.config import CHANNEL_ID
 from util.config import YOUTUBE_API_KEY
+from util.checksum import generate_checksum
+from util.config import slangApiSalt, slangApiKey
 
 from manager.em_token_manager import get_fresh_token
 
 IGNORE_EXACT = {
     "lol", "hi", "hello", "ok", "nice", "wow", "🔥", "😂"
 }
+# DOUBT_PATTERN = re.compile('r(?i)\#doubt\b')
+
+DOUBT_PATTERN = re.compile(r'#doubt\b', re.IGNORECASE)
 
 _API_TIMEOUT = 15
-
 
 def extract_video_id(url: str):
     try:
@@ -25,7 +29,6 @@ def extract_video_id(url: str):
             r"(?:v=|youtu\.be/|live/|embed/)([a-zA-Z0-9_-]{11})",
             url
         )
-
         if match:
             return match.group(1)
 
@@ -145,6 +148,14 @@ def classify_message(message, stream_context=""):
     if not text:
         return "empty"
 
+    if not DOUBT_PATTERN.search(text):
+        return "discard"
+
+    text = DOUBT_PATTERN.sub("", text).strip()
+
+    if not text:
+        return "empty"
+    
     try:
         token = get_fresh_token()
 
@@ -154,13 +165,9 @@ def classify_message(message, stream_context=""):
         }
 
         payload = {
-            "sender_uuid": str(uuid.uuid4()),
-            "chat_room_id": 240,
-            "message": _build_prompt(text, stream_context),
-            "board_id": 180,
-            "class_id": 1581786,
-            "subject_id": 4900778,
-            "message_id": str(uuid.uuid4())
+            "text": _build_prompt(text, stream_context),
+            "action": "slang_prediction_and_classify",
+            "checksum": generate_checksum("slang_prediction_and_classify", slangApiKey, text, slangApiSalt)
         }
 
         response = None

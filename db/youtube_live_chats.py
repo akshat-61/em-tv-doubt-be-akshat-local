@@ -2,7 +2,7 @@ from pymongo import MongoClient, ASCENDING, DESCENDING
 from datetime import datetime
 from util.config import MONGODB_URI, MONGODB_DATABASE
 
-client = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=5000)
+client = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=500)
 db = client[MONGODB_DATABASE]
 
 

@@ -1,11 +1,13 @@
 import time
 import threading
 import queue
-import datetime
-
+# import datetime
+import asyncio
+# from collections import defaultdict
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
+from server import send_spam_alert
 
 import util.logger as logger
 from core.ai_engine import classify_message
@@ -16,6 +18,10 @@ from util.config import (
     USER_COOLDOWN_SECONDS,
     TOKEN_FILE,
 )
+
+spam_tracker = {}
+SPAM_THRESHOLD = 5
+SPAM_WINDOW = 60
 
 _seen_msgs = {}
 _seen_msgs_lock = threading.Lock()
@@ -34,6 +40,63 @@ _token_lock = threading.Lock()
 shutdown_event = threading.Event()
 message_queue = queue.Queue(maxsize=1000)
 
+def detect_spam(video_id, message):
+    text = message.strip().lower()
+    key = f"{video_id}:{text}"
+
+    if not text:
+        return
+
+    now = time.time()
+
+    if key not in spam_tracker:
+        spam_tracker[key] = {
+            "video_id": video_id,
+            "count": 1,
+            "first_seen": now,
+            "last_seen": now,
+            "flagged": False
+        }
+        return
+
+    item = spam_tracker[key]
+
+    if now - item["first_seen"] > SPAM_WINDOW:
+        item["video_id"] = video_id
+        item["count"] = 1
+        item["first_seen"] = now
+        item["flagged"] = False
+    else:
+        item["count"] += 1
+
+    item["last_seen"] = now
+
+    if item["count"] >= SPAM_THRESHOLD and not item["flagged"]:
+        item["flagged"] = True
+        _send_spam_alert(item["video_id"], text, True)
+
+def spam_monitor():
+    while not shutdown_event.is_set():
+        now = time.time()
+        for key in list(spam_tracker.keys()):
+            item = spam_tracker[key]
+
+            if item["flagged"]:
+                if now - item["last_seen"] >= 50:
+                    _send_spam_alert(
+                        item["video_id"],
+                        item["message"],
+                        False
+                    )
+                    del spam_tracker[key]
+
+        time.sleep(5)
+
+def _send_spam_alert(video_id, message, status):
+    try:
+        asyncio.run(send_spam_alert(video_id, message, status))
+    except Exception as e:
+        logger.log_error("send_spam_alert", str(e))
 
 def _get_youtube_client():
     with _token_lock:
@@ -130,6 +193,7 @@ def _process_messages_worker():
 
             username = msg["authorDetails"]["displayName"]
             text = msg["snippet"]["displayMessage"]
+            detect_spam(video_id, text)
             message_id = msg["id"]
 
             now = time.time()
@@ -147,6 +211,8 @@ def _process_messages_worker():
                 continue
 
             classification = classify_message(text, ctx)
+            if classification == "discard":
+                continue
 
             insert_youtube_chat(
                 video_id=video_id,
@@ -185,6 +251,11 @@ def start_bot(video_id):
         ).start()
 
 def run():
+    threading.Thread(
+        target=spam_monitor,
+        daemon=True
+    ).start()
+
     while not shutdown_event.is_set():
         try:
             sessions = get_active_sessions()

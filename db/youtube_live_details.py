@@ -65,7 +65,7 @@ def get_db():
     global client, db, live_sessions
     if client is None:
         try:
-            client = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=5000)
+            client = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=500)
             db = client[MONGODB_DATABASE]
             live_sessions = db["em_tv_live_sessions"]
             logger.log_info("mongodb_connection_details", db=str(db))

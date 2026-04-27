@@ -6,7 +6,7 @@ load_dotenv()
 
 API_URL = os.getenv(
     "API_URL",
-    "https://apigateway.extramarks.com/ai-chat/chat"
+    "http://chat-slang-detection-dev:8002"
 )
 
 API_TIMEOUT = int(os.getenv("API_TIMEOUT", 15))
@@ -46,6 +46,12 @@ username = "chatsrvs_mongo"
 password = "chat@456"
 database = "chat_srvs"
 authenticationDatabase = "admin"
+# host="10.182.3.17"
+# port="18597"
+# authenticationDatabase="admin"
+# username="chatmsa_prod_app"
+# password="chAt#3dfd#3MS$sAApPp3"
+# database="chat_service_prod"
 
 MONGODB_URI = f"mongodb://{username}:{quote_plus(password)}@{host}:{port}/{database}?authSource={authenticationDatabase}&readPreference=primary&directConnection=true&ssl=false"
 
@@ -66,3 +72,7 @@ YOUTUBE_CLIENT_SECRET_FILE = os.getenv(
 YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
 CHANNEL_ID = os.getenv("CHANNEL_ID")
 API_URL = os.getenv("API_URL")
+
+
+slangApiKey="5e884898da280470J6K9L4QPZ7X1M2V3"
+slangApiSalt="CsDe&An!2024"
